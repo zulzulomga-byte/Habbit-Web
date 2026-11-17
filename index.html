@@ -15,9 +15,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Onest:wght@400..700&family=Anton&display=swap">
 <script>
-/* jembatan ke plugin native Capacitor (aman dipakai di browser biasa) */
+/* jembatan ke plugin native Capacitor (aman dipakai di browser biasa).
+   Memanggil bridge native langsung (nativePromise), tidak bergantung pada registerPlugin. */
 window.__nat={cache:{},
- isNative:function(){try{return !!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())}catch(e){return false}},
+ isNative:function(){try{var C=window.Capacitor;if(window.MhNative)return true;if(!C)return false;if(C.isNativePlatform)return !!C.isNativePlatform();if(C.getPlatform)return C.getPlatform()!=='web';return !!C.isNative}catch(e){return false}},
+ call:function(n,m,o){try{var C=window.Capacitor;if(C&&C.nativePromise)return C.nativePromise(n,m,o||{});
+   if(C&&C.Plugins&&C.Plugins[n]&&C.Plugins[n][m])return C.Plugins[n][m](o||{});
+   if(C&&C.registerPlugin){var x=this.p(n);if(x&&x[m])return x[m](o||{})}}catch(e){return Promise.reject(e)}
+   return Promise.reject(new Error('plugin '+n+' tidak tersedia'))},
+ listen:function(n,ev,cb){try{var C=window.Capacitor;if(C&&C.nativeCallback)return C.nativeCallback(n,'addListener',{eventName:ev},cb)}catch(e){}
+   try{var x=this.p(n);if(x&&x.addListener)x.addListener(ev,cb)}catch(e){}},
  p:function(n){if(this.cache[n]!==undefined)return this.cache[n];var x=null;try{x=Capacitor.registerPlugin(n)}catch(e){}this.cache[n]=x;return x}};
 </script>
 <style>
@@ -715,7 +722,7 @@ if(!S||!S.habits)S={v:1,name:'',onboarded:false,theme:'system',habits:[],log:{},
 S.log=S.log&&typeof S.log==='object'?S.log:{};
 S.at=S.at&&typeof S.at==='object'?S.at:{};if(!Array.isArray(S.notes))S.notes=DEFNOTES();if(!Array.isArray(S.courses))S.courses=[];if(!Array.isArray(S.tasks))S.tasks=[];if(S.cs==='solid')S.cs='main';
 if(!S.since)S.since=Date.now();
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}try{mirror()}catch(e){}};
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}try{mirror()}catch(e){}try{remDirty()}catch(e){}};
 const t0=new Date();
 const UI={enter:true,tab:'today',date:todayKey(),filter:'all',closed:{},sheet:null,draft:null,sheetHtml:'',range:'week',barSel:null,cal:{y:t0.getFullYear(),m:t0.getMonth()},dir:14,confirm:null,dataBox:null,dataText:''};
 const TABS=['today','task','ins','prof'];
@@ -745,7 +752,8 @@ const STARTERS=[
 {id:'s-air',name:'Minum air',icon:'water',hue:'blue',type:'count',target:8,unit:'gelas',part:'any',desc:'Satu gelas sekitar 250 ml. Delapan gelas hanya patokan umum; kebutuhanmu bisa lebih banyak kalau aktif atau cuaca panas.'},
 {id:'s-jalan',name:'Jalan kaki',icon:'walk',hue:'lime',type:'timer',target:15,unit:'menit',part:'sore',desc:'Jalan santai di luar rumah, tanpa target kecepatan. Yang dihitung lamanya bergerak, bukan jauhnya.'},
 {id:'s-baca',name:'Baca buku',icon:'book',hue:'navy',type:'count',target:10,unit:'halaman',part:'malam',desc:'Buku cetak atau e-book, bukan media sosial. Sepuluh halaman cukup untuk menjaga kebiasaan tetap jalan.'},
-{id:'s-jurnal',name:'Jurnal syukur',icon:'journal',hue:'blue',type:'check',target:1,unit:'',part:'malam',desc:'Tulis satu sampai tiga hal yang kamu syukuri hari ini, sekecil apa pun, misalnya makan siang yang enak atau dibantu teman. Satu kalimat per hal sudah cukup.'}];
+{id:'s-jurnal',name:'Jurnal syukur',icon:'journal',hue:'blue',type:'check',target:1,unit:'',part:'malam',desc:'Tulis satu sampai tiga hal yang kamu syukuri hari ini, sekecil apa pun, misalnya makan siang yang enak atau dibantu teman. Satu kalimat per hal sudah cukup.'},
+{id:'s-makan',name:'Makan siang tepat waktu',icon:'apple',hue:'lime',type:'check',target:1,unit:'',part:'siang',desc:'Makan siang sebelum lewat jam dua, tanpa sambil mengerjakan hal lain. Energi sore hari sering ditentukan dari sini.'}];
 function addStarters(){const have=new Set(S.habits.map(h=>h.id)),add=STARTERS.filter(h=>!have.has(h.id)).map(h=>({...h,days:ALL.slice(),created:todayKey()}));S.habits.push(...add);return add.length}
 function fl(sel,txt){if(reduce)return;const e=document.querySelector(sel);if(!e)return;const r=e.getBoundingClientRect(),i=document.createElement('i');i.className='flt';i.textContent=txt;i.style.cssText=`left:${r.left+r.width/2}px;top:${r.top}px`;document.body.appendChild(i);i.addEventListener('animationend',()=>i.remove())}
 function tipHtml(){return`<aside class="tip" id="tip"><div class="tip-d" aria-hidden="true"><i></i></div><p><b>Kebiasaan awal.</b> Ketuk kartu untuk membaca penjelasannya, geser ke kanan untuk menyelesaikan. Hapus yang tidak kamu perlukan.</p><button data-act="tipOff" aria-label="Tutup petunjuk">${svg('x')}</button></aside>`}
@@ -904,7 +912,7 @@ function viewProf(){
 <div class="stat4" style="margin-top:12px;grid-template-columns:repeat(3,1fr)"><div style="background:var(--surface-2);box-shadow:none"><b>${S.habits.length}</b><span>Kebiasaan</span></div><div style="background:var(--surface-2);box-shadow:none"><b>${S.habits.length?days:0}</b><span>Hari</span></div><div style="background:var(--surface-2);box-shadow:none"><b>${total}</b><span>Centang</span></div></div></section>
 <p class="sect">Tampilan</p><div class="seg" style="--n:3;--i:${ti};margin-top:8px"><i class="ind"></i>${[['Otomatis','system'],['Terang','light'],['Gelap','dark']].map(([l,v])=>`<button class="${S.theme===v||(!S.theme&&v==='system')?'on':''}" data-act="setTheme" data-v="${v}">${l}</button>`).join('')}</div>
 <p class="sect">Kartu kebiasaan</p><div class="seg" style="--n:3;--i:${['main','bright','plain'].indexOf(S.cs||'main')};margin-top:8px"><i class="ind"></i>${[['Utama','main'],['Cerah','bright'],['Polos','plain']].map(([l,v])=>`<button class="${(S.cs||'main')===v?'on':''}" data-act="setCs" data-v="${v}">${l}</button>`).join('')}</div>
-${colorsHtml()}<p class="sect">Data</p><div class="list">${storageHtml()}<button class="rowb" data-act="export">${svg('copy')}<span style="flex:1">Ekspor data<small>Salin cadangan sebagai teks</small></span></button><button class="rowb" data-act="importBox">${svg('edit')}<span style="flex:1">Impor data<small>Tempel cadangan dari teks</small></span></button>
+${colorsHtml()}${__nat.isNative()?remCard():''}<p class="sect">Data</p><div class="list">${storageHtml()}<button class="rowb" data-act="export">${svg('copy')}<span style="flex:1">Ekspor data<small>Salin cadangan sebagai teks</small></span></button><button class="rowb" data-act="importBox">${svg('edit')}<span style="flex:1">Impor data<small>Tempel cadangan dari teks</small></span></button>
 ${UI.dataBox?`<div class="field"><div class="lbl">${UI.dataBox==='export'?'Cadangan (tersalin jika diizinkan)':'Tempel cadangan di sini'}</div><textarea id="f-data" ${UI.dataBox==='export'?'readonly':''}>${esc(UI.dataText)}</textarea>${UI.dataBox==='import'?'<button class="btn" style="margin-top:10px;height:48px" data-act="doImport">Impor sekarang</button>':''}</div>`:''}
 <button class="rowb" data-act="starters">${svg('leaf')}<span style="flex:1">Pulihkan kebiasaan awal<small>Menambah yang hilang, data lain tetap</small></span></button>
 <button class="rowb" data-act="seed">${svg('sparkle')}<span style="flex:1">Isi dengan contoh<small>Mengganti semua data saat ini</small></span></button>
@@ -927,7 +935,7 @@ ${isNew?`<div><div class="lbl" style="padding:0 4px">Mulai cepat</div><div class
 ${tp!=='check'?`<div class="stp" style="margin-top:14px"><button data-act="tgt" data-n="-${tp==='timer'?5:1}" aria-label="Kurangi">${svg('minus')}</button><div style="text-align:center"><b>${D.target}</b><small>${tp==='timer'?'menit':''}</small></div><button data-act="tgt" data-n="${tp==='timer'?5:1}" aria-label="Tambah">${svg('plus')}</button></div>${tp==='count'?`<input id="f-u" type="text" maxlength="12" data-field="unit" placeholder="Satuan (gelas, halaman...)" value="${esc(D.unit)}" style="margin-top:12px;width:100%;border:0;background:var(--surface-2);border-radius:14px;padding:12px 14px;outline:0">`:''}`:''}</div>
 <div class="field"><div class="lbl">Waktu<span>opsional</span></div><div class="row">${GROUPS.map(([k])=>`<button class="pill pw ${D.part===k?'on':''}" data-act="set" data-k="part" data-v="${k}">${svg(PI[k])}${PL[k]}</button>`).join('')}</div><p class="hint" id="ph-${D.part}">${PH[D.part]}</p></div>
 <div class="field"><div class="lbl">Keterangan<span>opsional · <i id="cnt" style="font-style:normal">${(D.desc||'').length}</i>/160</span></div><textarea id="f-d" maxlength="160" rows="2" placeholder="Apa ini, dan kenapa penting buatmu? Boleh dikosongkan.">${esc(D.desc||'')}</textarea></div>
-<div class="field"><div class="lbl">Hari<button data-act="alldays" style="font-weight:600;color:var(--ink)">Setiap hari</button></div><div class="dw">${DAYS.map((x,i)=>`<button class="${D.days.includes(i)?'on':''}" data-act="day2" data-i="${i}" aria-pressed="${D.days.includes(i)}">${x[0]}</button>`).join('')}</div></div></div>
+<div class="field"><div class="lbl">Hari<button data-act="alldays" style="font-weight:600;color:var(--ink)">Setiap hari</button></div><div class="dw">${DAYS.map((x,i)=>`<button class="${D.days.includes(i)?'on':''}" data-act="day2" data-i="${i}" aria-pressed="${D.days.includes(i)}">${x[0]}</button>`).join('')}</div></div>${__nat.isNative()?remField(D):''}</div>
 <div class="sheet-foot"><button class="btn" data-act="saveH">${isNew?'Simpan kebiasaan':'Simpan perubahan'}</button></div>`}
 
 /* ---------- sheet: detail ---------- */
@@ -1078,7 +1086,7 @@ function timerToggle(h,d){
  if(timerOn(h,d)&&S.timer.start){commitTimer();return}
  if(S.timer)commitTimer();
  S.timer={id:h.id,date:d,start:Date.now()};save();tickStart();hap(10);render()}
-function newDraft(){return{name:'',icon:'sparkle',hue:'blue',type:'check',target:1,unit:'',part:'any',desc:'',days:[0,1,2,3,4,5,6]}}
+function newDraft(){return{rem:null,name:'',icon:'sparkle',hue:'blue',type:'check',target:1,unit:'',part:'any',desc:'',days:[0,1,2,3,4,5,6]}}
 function exportJson(){return JSON.stringify({app:'ma-habbit',v:1,habits:S.habits,log:S.log,name:S.name,at:S.at,notes:S.notes,col:S.col,cs:S.cs,courses:S.courses,tasks:S.tasks})}
 
 function act(a,el){
@@ -1149,7 +1157,7 @@ function act(a,el){
  case'open':if(h)openSheet({type:'detail',id:h.id});return;
  case'closeSheet':closeSheet();return;
  case'add':UI.draft=newDraft();openSheet({type:'edit'});return;
- case'edit':if(h){UI.draft={id:h.id,name:h.name,icon:h.icon,hue:h.hue,type:h.type,target:h.target,unit:h.unit||'',part:h.part,desc:h.desc||'',days:h.days.slice()};openSheet({type:'edit',id:h.id})}return;
+ case'edit':if(h){UI.draft={id:h.id,name:h.name,icon:h.icon,hue:h.hue,type:h.type,target:h.target,unit:h.unit||'',part:h.part,desc:h.desc||'',days:h.days.slice(),rem:remOk(h.rem)?{on:true,time:h.rem.time,mode:h.rem.mode}:null};openSheet({type:'edit',id:h.id})}return;
  case'tpl':UI.draft=Object.assign(newDraft(),TPL[+el.dataset.i]);render();return;
  case'set':{const k=el.dataset.k,v=el.dataset.v;UI.draft[k]=v;if(k==='type'){UI.draft.target=v==='check'?1:v==='count'?8:15;UI.draft.unit=v==='count'?(UI.draft.unit||'gelas'):''}render();return}
  case'tgt':{const D=UI.draft;D.target=Math.max(D.type==='timer'?5:1,Math.min(D.type==='timer'?180:99,D.target+(+el.dataset.n)));render();return}
@@ -1157,7 +1165,7 @@ function act(a,el){
  case'alldays':UI.draft.days=[0,1,2,3,4,5,6];render();return;
  case'saveH':{const D=UI.draft;if(!D.name.trim()){const f=$('#f-n');f.parentElement.classList.add('shake');setTimeout(()=>f.parentElement.classList.remove('shake'),450);f.focus();toast('Beri nama dulu.');return}
   if(!D.days.length){toast('Pilih minimal satu hari.');return}
-  const o={name:D.name.trim(),icon:D.icon,hue:D.hue,type:D.type,target:D.target,unit:D.unit.trim(),part:D.part,desc:(D.desc||'').trim(),days:D.days};
+  const o={name:D.name.trim(),icon:D.icon,hue:D.hue,type:D.type,target:D.target,unit:D.unit.trim(),part:D.part,desc:(D.desc||'').trim(),days:D.days,rem:remOk(D.rem)?{on:true,time:D.rem.time,mode:D.rem.mode}:null};
   if(D.id){Object.assign(hab(D.id),o);toast('Perubahan disimpan')}else{S.habits.push(Object.assign({id:'h'+Date.now().toString(36),created:todayKey()},o));toast('Kebiasaan ditambahkan')}
   save();closeSheet();return}
  case'skip':if(h){if(timerOn(h,d))S.timer=null;setRaw(h,d,skipped(h,d)?0:-1);save();render();hap(8)}return;
@@ -1170,6 +1178,12 @@ function act(a,el){
  case'cal':{let{y,m}=UI.cal;m+=+el.dataset.n;if(m<0){m=11;y--}if(m>11){m=0;y++}UI.cal={y,m};render();return}
  case'goDay':UI.wd=0;UI.ni=0;UI.date=el.dataset.date;UI.tab='today';UI.dir=-16;UI.enter=true;ghostOut(UI.dir);scrollTo({top:0,behavior:'instant'});document.documentElement.style.setProperty('--sy','0');render();return;
  case'export':{UI.dataBox='export';UI.dataText=exportJson();render();try{navigator.clipboard.writeText(UI.dataText).then(()=>toast('Cadangan disalin'),()=>toast('Salin teks di bawah secara manual'))}catch(e){toast('Salin teks di bawah secara manual')}return}
+ case'remSet':{const D=UI.draft;D.rem={on:true,time:(D.rem&&D.rem.time)||remDefault(D.part),mode:el.dataset.m};render();remAsk(false);return}
+ case'remOff':UI.draft.rem=null;render();return;
+ case'remPerm':remAsk(true);return;
+ case'remTest':remTest(el.dataset.m);return;
+ case'remApp':try{window.MhNative&&MhNative.openAppSettings&&MhNative.openAppSettings()}catch(e){}return;
+ case'remChan':try{window.MhNative&&MhNative.openChannelSettings&&MhNative.openChannelSettings('mh_alarm')}catch(e){}return;
  case'bkFile':backupFile();return;
  case'rsFile':{const fi=$('#f-file');if(fi)fi.click();return}
  case'dir':pickDir();return;
@@ -1188,6 +1202,7 @@ app.addEventListener('input',e=>{const t=e.target;
  else if(t.type==='color'){const c=t.dataset.ctl;if(c==='draft')UI.draft.hue=t.value;else if(c==='note')UI.nd.hue=t.value;else if(c==='course')UI.cd.hue=t.value;else{S.col=S.col||{};S.col[t.dataset.k]=t.value;save();applyColors()}if(!UI.rq)UI.rq=requestAnimationFrame(()=>{UI.rq=0;render()})}
  else if(t.id==='f-nt'){UI.nd.text=t.value;const c=$('#ncnt');if(c)c.textContent=t.value.length;const e=document.querySelector('.nt-prev .qt'),ci=document.querySelector('.nt-prev .nt-in');if(e)e.textContent=t.value;if(ci)ci.dataset.sz=szc(t.value.length)}
  else if(t.id==='f-nb'){UI.nd.by=t.value;const gh=document.querySelector('.nt-prev .gh');if(gh)gh.textContent=(t.value||'\u201c').toUpperCase().slice(0,14);const e=document.querySelector('.nt-prev .by,.nt-prev .nk'),pv=document.querySelector('.nt-prev');if(e&&(t.value||UI.nd.kind==='note'))e.textContent=t.value||'Catatan';else if(pv)pv.innerHTML=noteCard(UI.nd)}
+ else if(t.id==='f-rt'){if(UI.draft&&UI.draft.rem&&/^\d\d:\d\d$/.test(t.value))UI.draft.rem.time=t.value}
  else if(t.id==='f-tt')UI.td.title=t.value
  else if(t.id==='f-tn')UI.td.note=t.value
  else if(t.id==='f-td')UI.td.due=t.value
@@ -1246,7 +1261,7 @@ function storageHtml(){
  if(UI.snaps)h+='<div class="field">'+(UI.snaps.length?UI.snaps.map(function(x){return'<div class="srow2"><span>'+(x.day==='pre'?'Sebelum pemulihan terakhir':fmtD(x.day))+' · '+x.n+' kebiasaan</span><button class="pill" data-act="rsSnap" data-day="'+x.day+'">Pulihkan</button></div>'}).join(''):'<p style="color:var(--ink-2)">Belum ada riwayat.</p>')+'</div>';
  return h}
 async function backupFile(){var json=exportJson(),name='ma-habbit-cadangan-'+todayKey()+'.json',file=new File([json],name,{type:'application/json'});
- try{if(__nat.isNative()){var _w=await __nat.p('Filesystem').writeFile({path:name,data:json,directory:'CACHE',encoding:'utf8'});await __nat.p('Share').share({title:'Cadangan Ma Habbit',url:_w.uri,dialogTitle:'Simpan cadangan'})}
+ try{if(__nat.isNative()){var _w=await __nat.call('Filesystem','writeFile',{path:name,data:json,directory:'CACHE',encoding:'utf8'});await __nat.call('Share','share',{title:'Cadangan Ma Habbit',url:_w.uri,dialogTitle:'Simpan cadangan'})}
   else if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],title:'Cadangan Ma Habbit'});
   else{var a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500)}
   S.lastBackup=Date.now();save();render();toast('Cadangan dibuat: '+name)}catch(e){if(!e||(e.name!=='AbortError'&&!/cancel/i.test(String(e.message||e))))toast('Gagal membuat file cadangan')}}
@@ -1332,6 +1347,65 @@ function themeVT(fn,el){
  vt.ready.then(()=>document.documentElement.animate({clipPath:[`circle(0px at ${x}px ${y}px)`,`circle(${R}px at ${x}px ${y}px)`]},{duration:800,easing:'cubic-bezier(.65,0,.2,1)',pseudoElement:'::view-transition-new(root)'})).catch(()=>{});
 }
 
+/* ---------- pengingat (khusus APK) ---------- */
+const remOk=r=>!!r&&r.on!==false&&/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time||'')&&(r.mode==='notif'||r.mode==='alarm');
+const remDefault=p=>({dini:'03:30',subuh:'05:00',pagi:'07:00',siang:'12:00',sore:'16:00',malam:'20:00',any:'09:00'})[p]||'09:00';
+const remHash=s=>{let x=7;for(let i=0;i<s.length;i++)x=(x*31+s.charCodeAt(i))%200000;return x};
+const REM_TEST=1999999;
+const remBody=h=>h.type==='check'?'Waktunya. Ketuk untuk membuka dan mencentang.':h.type==='count'?'Target hari ini: '+h.target+' '+(h.unit||'kali'):'Timer '+h.target+' menit';
+let remBusy=false,remAgain=false,remTimer=0;
+function remDirty(){if(!__nat.isNative())return;clearTimeout(remTimer);remTimer=setTimeout(remSync,1200)}
+async function remSync(){
+ if(!__nat.isNative())return;
+ if(remBusy){remAgain=true;return}
+ remBusy=true;UI.remErr='';
+ try{
+  const perm=await __nat.call('LocalNotifications','checkPermissions',{});
+  UI.remPerm=perm&&perm.display;
+  const pend=await __nat.call('LocalNotifications','getPending',{});
+  const old=((pend&&pend.notifications)||[]).filter(x=>x.id!==REM_TEST).map(x=>({id:x.id}));
+  if(old.length)await __nat.call('LocalNotifications','cancel',{notifications:old});
+  if(UI.remPerm==='granted'){
+   const T=todayKey(),now=Date.now(),list=[];
+   for(const h of S.habits){const r=h.rem;if(!remOk(r))continue;
+    for(let i=0;i<7;i++){const d=addDays(T,i);if(!sched(h,d))continue;if(i===0&&(done(h,d)||skipped(h,d)))continue;
+     const hm=r.time.split(':').map(Number),f=fromKey(d);f.setHours(hm[0],hm[1],0,0);
+     if(f.getTime()<=now+3000)continue;
+     list.push({id:remHash(h.id)*10+i,title:h.name,body:remBody(h),schedule:{at:f.toISOString(),allowWhileIdle:true},channelId:r.mode==='alarm'?'mh_alarm':'mh_remind',smallIcon:'ic_stat_mh',extra:{hid:h.id}})}}
+   if(list.length)await __nat.call('LocalNotifications','schedule',{notifications:list});
+  }
+ }catch(e){UI.remErr=String((e&&e.message)||e).slice(0,80)}
+ finally{remBusy=false;if(remAgain){remAgain=false;remDirty()}else if(UI.tab==='prof'&&!UI.sheet)render()}
+}
+async function remAsk(force){
+ try{
+  let p=await __nat.call('LocalNotifications','checkPermissions',{});
+  if(p&&p.display!=='granted'&&(p.display==='prompt'||p.display==='prompt-with-rationale')){p=await __nat.call('LocalNotifications','requestPermissions',{})}
+  UI.remPerm=p&&p.display;
+  if(UI.remPerm!=='granted'){toast('Notifikasi belum diizinkan.','Setelan',()=>{try{MhNative.openAppSettings()}catch(e){}})}
+  else if(force)toast('Notifikasi diizinkan.');
+  remDirty();
+ }catch(e){UI.remErr=String((e&&e.message)||e).slice(0,80);toast('Gagal meminta izin notifikasi.')}
+ if(!UI.sheet||force)render();
+}
+async function remTest(mode){
+ try{
+  let p=await __nat.call('LocalNotifications','checkPermissions',{});
+  if(p&&p.display!=='granted')p=await __nat.call('LocalNotifications','requestPermissions',{});
+  UI.remPerm=p&&p.display;
+  if(UI.remPerm!=='granted'){toast('Izinkan notifikasi dulu.');render();return}
+  await __nat.call('LocalNotifications','schedule',{notifications:[{id:REM_TEST,title:mode==='alarm'?'Tes alarm Ma Habbit':'Tes pengingat Ma Habbit',body:'Kalau ini muncul, pengingat berfungsi.',schedule:{at:new Date(Date.now()+5000).toISOString(),allowWhileIdle:true},channelId:mode==='alarm'?'mh_alarm':'mh_remind',smallIcon:'ic_stat_mh'}]});
+  toast('Tes muncul dalam 5 detik. Kamu boleh keluar dari app.');
+ }catch(e){UI.remErr=String((e&&e.message)||e).slice(0,80);toast('Gagal menjadwalkan tes.');render()}
+}
+function remField(D){
+ const r=D.rem,m=r?r.mode:'';
+ return`<div class="field"><div class="lbl">Pengingat<span>${r&&UI.remPerm&&UI.remPerm!=='granted'?'notifikasi belum diizinkan':'opsional'}</span></div><div class="seg flat" style="--n:3;--i:${!r?0:m==='notif'?1:2};background:var(--surface-2)"><i class="ind"></i><button class="${!r?'on':''}" data-act="remOff">Mati</button><button class="${m==='notif'?'on':''}" data-act="remSet" data-m="notif">Pengingat</button><button class="${m==='alarm'?'on':''}" data-act="remSet" data-m="alarm">+ Alarm</button></div>${r?`<input id="f-rt" type="time" value="${r.time}" aria-label="Jam pengingat" style="margin-top:12px;width:100%;border:0;background:var(--surface-2);border-radius:14px;padding:12px 14px;outline:0;color:inherit;font:inherit"><p class="hint">${m==='alarm'?'Bunyi alarm panjang dan getar. Berhenti saat notifikasinya dibuka atau digeser.':'Notifikasi biasa. Hanya di hari yang dipilih, dan tidak muncul kalau kebiasaannya sudah selesai.'}</p>`:''}</div>`}
+function remCard(){
+ const ok=UI.remPerm==='granted',n=S.habits.filter(x=>remOk(x.rem)).length;
+ return`<p class="sect">Pengingat</p><div class="list"><div class="field stor"><div class="lbl">Status</div><div class="srow"><i class="sd ${ok?'ok':'warn'}"></i><span>${ok?'Notifikasi diizinkan':UI.remPerm==='denied'?'Notifikasi ditolak. Aktifkan di setelan app.':'Notifikasi belum diizinkan'}</span></div><div class="srow"><i class="sd ${n?'ok':'warn'}"></i><span>${n?n+' kebiasaan punya pengingat':'Belum ada kebiasaan yang diberi pengingat'}</span></div>${UI.remErr?`<div class="srow"><i class="sd warn"></i><span>Galat: ${esc(UI.remErr)}</span></div>`:''}</div>${ok?'':`<button class="rowb" data-act="remPerm">${svg('sparkle')}<span style="flex:1">Izinkan notifikasi<small>Wajib supaya pengingat bisa muncul</small></span></button>`}<button class="rowb" data-act="remTest" data-m="notif">${svg('sun')}<span style="flex:1">Tes pengingat<small>Muncul dalam 5 detik</small></span></button><button class="rowb" data-act="remTest" data-m="alarm">${svg('sleep')}<span style="flex:1">Tes alarm<small>Bunyi alarm dalam 5 detik</small></span></button><button class="rowb" data-act="remChan">${svg('heart')}<span style="flex:1">Suara dan mode senyap alarm<small>Atur nada, atau izinkan menembus Jangan Ganggu</small></span></button><button class="rowb" data-act="remApp">${svg('leaf')}<span style="flex:1">Setelan app dan baterai<small>Pilih Baterai: Tanpa batasan, supaya pengingat tidak telat</small></span></button></div>`}
+if(__nat.isNative()){document.addEventListener('visibilitychange',()=>{if(!document.hidden)remDirty()});setTimeout(remSync,2000)}
+
 window.__mh={back:function(){try{if(UI.sheet){closeSheet();return true}}catch(e){}return false}};
 })();
 </script>
@@ -1343,12 +1417,12 @@ window.__mh={back:function(){try{if(UI.sheet){closeSheet();return true}}catch(e)
  function bar(){try{var c=getComputedStyle(root).getPropertyValue('--bg').trim();if(!/^#[0-9a-f]{6}$/i.test(c))return;
   var d=dark(),k=c+(d?'D':'L');if(k===last)return;last=k;
   if(window.MhNative&&MhNative.setBars){MhNative.setBars(c,d);return}
-  var SB=n.p('StatusBar');if(!SB)return;SB.setBackgroundColor({color:c});SB.setStyle({style:d?'DARK':'LIGHT'})}catch(e){}}
+  n.call('StatusBar','setBackgroundColor',{color:c}).catch(function(){});n.call('StatusBar','setStyle',{style:d?'DARK':'LIGHT'}).catch(function(){})}catch(e){}}
  try{new MutationObserver(bar).observe(root,{attributes:true,attributeFilter:['data-theme']})}catch(e){}
  try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',bar)}catch(e){}
  document.addEventListener('visibilitychange',function(){if(!document.hidden){last='';bar()}});
  bar();setTimeout(bar,400);setTimeout(bar,1500);
- try{var A=n.p('App');if(A)A.addListener('backButton',function(){var h=window.__mh&&window.__mh.back();if(!h)A.minimizeApp()})}catch(e){}
+ try{n.listen('App','backButton',function(){var h=window.__mh&&window.__mh.back();if(!h)n.call('App','minimizeApp').catch(function(){})})}catch(e){}
 })();
 </script>
 </body>

@@ -4,7 +4,7 @@
    - Font Google: disimpan setelah kunjungan online pertama, jadi tetap muncul saat offline.
    Service worker ini TIDAK menyentuh data habit (localStorage / IndexedDB).
    Naikkan VERSION hanya kalau daftar file di bawah atau ikon berubah. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP = 'mahabbit-app-' + VERSION;
 const FONTS = 'mahabbit-fonts-v1';
 const PRECACHE = [
